@@ -20,4 +20,4 @@ For image-to-text we support
 
 This works with single/multiple prompts. You can also use 1 or multiple images stored in your local storage to perform. 
 
-Leave a comment/ ping us karand120497@gmail.com for feature requests! 
+Leave a comment/ ping us karand120497@gmail.com or arihantbadjatya@gmail.com for feature requests! 
