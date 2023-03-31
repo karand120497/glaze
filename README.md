@@ -1,4 +1,4 @@
-# glaze
+# Glaze Chain
 
 This library is a way to abstract your workflows for images. You can use text to image and image to text models, set settings for your images and set guardrails for outputs. 
 
