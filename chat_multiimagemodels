@@ -12,6 +12,7 @@ import argparse
 import inspect
 from random import randint
 
+from torch import autocast
 from transformers import CLIPSegProcessor, CLIPSegForImageSegmentation
 from transformers import pipeline, BlipProcessor, BlipForConditionalGeneration, BlipForQuestionAnswering
 from transformers import AutoImageProcessor, UperNetForSemanticSegmentation
@@ -27,21 +28,21 @@ from langchain.agents.tools import Tool
 from langchain.chains.conversation.memory import ConversationBufferMemory
 from langchain.llms.openai import OpenAI
 
-VISUAL_CHATGPT_PREFIX = """Visual ChatGPT is designed to be able to assist with a wide range of text and visual related tasks, from answering simple questions to providing in-depth explanations and discussions on a wide range of topics. Visual ChatGPT is able to generate human-like text based on the input it receives, allowing it to engage in natural-sounding conversations and provide responses that are coherent and relevant to the topic at hand.
+GLAZE_PREFIX = """Glaze is designed to be able to assist with a wide range of text and visual related tasks, from answering simple questions to providing in-depth explanations and discussions on a wide range of topics. Glaze is able to generate human-like text based on the input it receives, allowing it to engage in natural-sounding conversations and provide responses that are coherent and relevant to the topic at hand.
 
-Visual ChatGPT is able to process and understand large amounts of text and images. As a language model, Visual ChatGPT can not directly read images, but it has a list of tools to finish different visual tasks. Each image will have a file name formed as "image/xxx.png", and Visual ChatGPT can invoke different tools to indirectly understand pictures. When talking about images, Visual ChatGPT is very strict to the file name and will never fabricate nonexistent files. When using tools to generate new image files, Visual ChatGPT is also known that the image may not be the same as the user's demand, and will use other visual question answering tools or description tools to observe the real image. Visual ChatGPT is able to use tools in a sequence, and is loyal to the tool observation outputs rather than faking the image content and image file name. It will remember to provide the file name from the last tool observation, if a new image is generated.
+Glaze is able to process and understand large amounts of text and images. As a language model, Glaze can not directly read images, but it has a list of tools to finish different visual tasks. Each image will have a file name formed as "image/xxx.png", and Glaze can invoke different tools to indirectly understand pictures. When talking about images, Glaze is very strict to the file name and will never fabricate nonexistent files. When using tools to generate new image files, Glaze is also known that the image may not be the same as the user's demand, and will use other visual question answering tools or description tools to observe the real image. Glaze is able to use tools in a sequence, and is loyal to the tool observation outputs rather than faking the image content and image file name. It will remember to provide the file name from the last tool observation, if a new image is generated.
 
-Human may provide new figures to Visual ChatGPT with a description. The description helps Visual ChatGPT to understand this image, but Visual ChatGPT should use tools to finish following tasks, rather than directly imagine from the description.
+Human may provide new figures to Glaze with a description. The description helps Glaze to understand this image, but Glaze should use tools to finish following tasks, rather than directly imagine from the description.
 
-Overall, Visual ChatGPT is a powerful visual dialogue assistant tool that can help with a wide range of tasks and provide valuable insights and information on a wide range of topics. 
+Overall, Glaze is a powerful visual dialogue assistant tool that can help with a wide range of tasks and provide valuable insights and information on a wide range of topics.
 
 
 TOOLS:
 ------
 
-Visual ChatGPT  has access to the following tools:"""
+Glaze  has access to the following tools:"""
 
-VISUAL_CHATGPT_FORMAT_INSTRUCTIONS = """To use a tool, please use the following format:
+GLAZE_FORMAT_INSTRUCTIONS = """To use a tool, please use the following format:
 
 ```
 Thought: Do I need to use a tool? Yes
@@ -58,7 +59,7 @@ Thought: Do I need to use a tool? No
 ```
 """
 
-VISUAL_CHATGPT_SUFFIX = """You are very strict to the filename correctness and will never fake a file name if it does not exist.
+GLAZE_SUFFIX = """You are very strict to the filename correctness and will never fake a file name if it does not exist.
 You will remember to provide the image file name loyally if it's provided in the last tool observation.
 
 Begin!
@@ -67,8 +68,8 @@ Previous conversation history:
 {chat_history}
 
 New input: {input}
-Since Visual ChatGPT is a text language model, Visual ChatGPT must use tools to observe images rather than imagination.
-The thoughts and observations are only visible for Visual ChatGPT, Visual ChatGPT should remember to repeat important information in the final response for Human. 
+Since Glaze is a text language model, Glaze must use tools to observe images rather than imagination.
+The thoughts and observations are only visible for Glaze, Glaze should remember to repeat important information in the final response for Human.
 Thought: Do I need to use a tool? {agent_scratchpad} Let's think step by step.
 """
 
@@ -372,7 +373,7 @@ class Text2Image:
         return image_filename
 
 
-class Text2Image_manga:
+class Text2manga:
     def __init__(self, device):
         print(f"Initializing Text2Image_manga to {device}")
         self.device = device
@@ -384,22 +385,25 @@ class Text2Image_manga:
         self.n_prompt = 'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, ' \
                         'fewer digits, cropped, worst quality, low quality'
 
-    @prompts(name="Generate Image From User Input Text",
-             description="useful when you want to generate an image from a user input text and save it to a file. "
-                         "like: generate an image of an object or something, or generate an image that includes some objects. "
+    @prompts(name="Generate manga image from user input",
+             description="useful when you want to generate a manga image from a user input text and save it to a file. "
+                         "like: generate an image of an object or something in manga style, or generate an image that includes some objects in manga style. "
                          "The input to this tool should be a string, representing the text used to generate image. ")
     def inference(self, text):
         image_filename = os.path.join('image', f"{str(uuid.uuid4())[:8]}.png")
         prompt = text + ', ' + self.a_prompt
-        image = self.pipe(prompt, negative_prompt=self.n_prompt).images[0]
+        with autocast("cuda"):
+          image = self.pipe(prompt,negative_prompt=self.n_prompt, guidance_scale=6)["sample"][0]
+        #image = self.pipe(prompt, negative_prompt=self.n_prompt, guidance_scale=6)["sample"][0]
+        #image = self.pipe(prompt, negative_prompt=self.n_prompt).images[0]
         image.save(image_filename)
         print(
             f"\nProcessed Text2Image_manga, Input Text: {text}, Output Image: {image_filename}")
         return image_filename
 
-class present_add_borders:
+class borders:
     def __init__(self, device):
-        print(f"Initializing present_add_borders to {device}")
+        print(f"Initializing borders to {device}")
         self.device = device
         self.torch_dtype = torch.float16 if 'cuda' in device else torch.float32
         #self.model_id = ""
@@ -407,15 +411,17 @@ class present_add_borders:
         #self.pipe.to(device)
         #self.a_prompt = 'best quality, extremely detailed'
         #self.n_prompt = 'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, ' \'fewer digits, cropped, worst quality, low quality'
-        
+       
 
     @prompts(name="Add borders to image",
              description="Useful when user wants to edit images by changing or adding a specific type of border to them, or when user wants the image in a specific size or border width. Borders can be useful for framing images or drawing attention to specific parts of them. Comment end  ")
-    def inference(self, text):
+    def inference(self, inputs):
+        image_path, text = inputs.split(",")[0], ','.join(inputs.split(',')[1:])
+        src = Image.open(image_path)
         image_filename = os.path.join('image', f"{str(uuid.uuid4())[:8]}.png")
         borderType = cv2.BORDER_CONSTANT
-        prompt = text + ', ' + self.a_prompt
-        src = cv2.imread(image_filename)
+        #prompt = text + ', ' + self.a_prompt
+        #src = cv2.imread(image_filename)
         top = int(0.05 * src.shape[0])
         bottom = top
         left = int(0.05 * src.shape[1])
@@ -1099,9 +1105,9 @@ class InfinityOutPainting:
 class ConversationBot:
     def __init__(self, load_dict):
         # load_dict = {'VisualQuestionAnswering':'cuda:0', 'ImageCaptioning':'cuda:1',...}
-        print(f"Initializing VisualChatGPT, load_dict={load_dict}")
+        print(f"Initializing glaze, load_dict={load_dict}")
         if 'ImageCaptioning' not in load_dict:
-            raise ValueError("You have to load ImageCaptioning as a basic function for VisualChatGPT")
+            raise ValueError("You have to load ImageCaptioning as a basic function for glaze")
 
         self.llm = OpenAI(temperature=0)
         self.memory = ConversationBufferMemory(memory_key="chat_history", output_key='output')
@@ -1132,8 +1138,8 @@ class ConversationBot:
             verbose=True,
             memory=self.memory,
             return_intermediate_steps=True,
-            agent_kwargs={'prefix': VISUAL_CHATGPT_PREFIX, 'format_instructions': VISUAL_CHATGPT_FORMAT_INSTRUCTIONS,
-                          'suffix': VISUAL_CHATGPT_SUFFIX}, )
+            agent_kwargs={'prefix': GLAZE_PREFIX, 'format_instructions': GLAZE_FORMAT_INSTRUCTIONS,
+                          'suffix': GLAZE_SUFFIX}, )
 
     def run_text(self, text, state):
         self.agent.memory.buffer = cut_dialogue_history(self.agent.memory.buffer, keep_last_n_words=500)
