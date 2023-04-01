@@ -6,7 +6,7 @@ class Template:
         self.model_id = ""
         self.pipe = StableDiffusionPipeline.from_pretrained(self.model_id)
         self.lora_weights = "file location for weights in safetensor"                                                    torch_dtype=self.torch_dtype)
-        self.lora_weights = self.
+        self.pipe = self.convert(self.model_id,self.lora_weights)
         self.pipe.to(device)
         self.a_prompt = 'best quality, extremely detailed'
         self.n_prompt = 'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, ' \
